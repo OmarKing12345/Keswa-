@@ -1,0 +1,41 @@
+@Keswa Project_HostAddress = https://localhost:7061
+@KeswaProject_HostAddress = https://localhost:7061
+@KeswaProject_HostAddress = http://localhost:5058
+
+GET {{KeswaProject_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+GET {{KeswaProject_HostAddress}}/api/category
+
+###
+
+GET {{KeswaProject_HostAddress}}/api/category
+
+###
+
+GET {{KeswaProject_HostAddress}}/api/category
+
+###
+
+GET {{Keswa Project_HostAddress}}/api/category
+
+###
+
+GET {{Keswa Project_HostAddress}}/api/category
+
+###
+
+GET {{KeswaProject_HostAddress}}/api/category
+
+###
+
+POST {{KeswaProject_HostAddress}}/api/account/RegisterAccount
+Content-Type: application/json
+
+{
+  //RegisterDto
+}
+
+###

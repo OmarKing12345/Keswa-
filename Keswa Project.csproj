@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Keswa_Project</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="7.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.17">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\backendproject\Kesawa Data Access\Keswa Data Access.csproj" />
+    <ProjectReference Include="..\backendproject\Keswa Entities\Keswa Entities.csproj" />
+    <ProjectReference Include="..\backendproject\Keswa Untilities\Keswa Untilities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+    <Folder Include="wwwroot\Images\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="wwwroot\Images\child2.webp" />
+    <None Include="wwwroot\Images\child4.webp" />
+    <None Include="wwwroot\Images\dress.webp" />
+    <None Include="wwwroot\Images\hoody.webp" />
+    <None Include="wwwroot\Images\man.webp" />
+    <None Include="wwwroot\Images\ProductImages.sql" />
+    <None Include="wwwroot\Images\T-shirt.webp" />
+  </ItemGroup>
+
+</Project>
