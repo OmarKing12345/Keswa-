@@ -1,9 +1,11 @@
 ﻿using Kesawa_Data_Access.Repository.IRepository;
-using Keswa_Entities.Models;
-using Microsoft.AspNetCore.Mvc;
-using Keswa_Entities.Dtos.Response;
 using Keswa_Entities.Dtos.Request;
+using Keswa_Entities.Dtos.Response;
+using Keswa_Entities.Models;
 using Mapster;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 
 namespace Keswa_Project.Controllers.Admin
 {
@@ -13,13 +15,17 @@ namespace Keswa_Project.Controllers.Admin
     public class BrandController : ControllerBase
     {
         private readonly IBrandRepository _brandRepository;
+        private readonly IStringLocalizer<BrandController> _localizer;
 
-        public BrandController(IBrandRepository brandRepository)
+
+        public BrandController(IBrandRepository brandRepository, IStringLocalizer<BrandController> localizer)
         {
             _brandRepository = brandRepository;
+            _localizer = localizer;
         }
 
         // GET: api/Brand
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> Get()
         {
@@ -44,7 +50,7 @@ namespace Keswa_Project.Controllers.Admin
         public async Task<IActionResult> Create([FromBody] BrandRequest brandRequest)
         {
             if (brandRequest == null)
-                return BadRequest("Invalid brand data.");
+                return BadRequest(_localizer["Invalid brand data"]);
 
             var brand = await _brandRepository.CreateAsync(brandRequest.Adapt<Brand>());
             await _brandRepository.CommitAsync();
@@ -54,7 +60,7 @@ namespace Keswa_Project.Controllers.Admin
                 return Created($"{Request.Scheme}://{Request.Host}/api/Brand/{brand.Id}", brand.Adapt<BrandResponse>());
             }
 
-            return BadRequest("Could not create brand.");
+            return BadRequest(_localizer["Could not create brand"]);
         }
 
         // PUT: api/Brand/5
@@ -82,7 +88,7 @@ namespace Keswa_Project.Controllers.Admin
             {
                 _brandRepository.Delete(brand);
                 await _brandRepository.CommitAsync();
-                return Ok("Deleted successfully");
+                return Ok(_localizer[""]);
             }
 
             return NotFound();

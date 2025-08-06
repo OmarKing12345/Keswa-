@@ -5,10 +5,17 @@ using Keswa_Entities.Mapping;
 using Keswa_Entities.Models;
 using Keswa_Project.Hubs;
 using Keswa_Untilities;
+using Keswa_Untilities.Service;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
+using System.Globalization;
+using System.Text;
 
 namespace keswa
 {
@@ -38,6 +45,8 @@ namespace keswa
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddSignalR(); // ✅ لازم تضيف دي
+            //Radis
+            builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost"));
 
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
@@ -50,6 +59,21 @@ namespace keswa
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddDefaultTokenProviders();
 
+
+            builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+
+            const string defaultCulture = "en";
+            var supportedCultures = new[]
+            {
+                new CultureInfo(defaultCulture),
+                new CultureInfo("ar")
+            };
+            builder.Services.Configure<RequestLocalizationOptions>(options => {
+                options.DefaultRequestCulture = new RequestCulture(defaultCulture);
+                options.SupportedCultures = supportedCultures;
+                options.SupportedUICultures = supportedCultures;
+            });
+
             // ✅ Cookie Authentication for Identity
             builder.Services.ConfigureApplicationCookie(options =>
             {
@@ -60,20 +84,41 @@ namespace keswa
                 options.LogoutPath = "/api/Account/SignOut";
             });
 
-            // ✅ External Authentication (Google, Facebook)
-            builder.Services.AddAuthentication()
-                .AddGoogle("google", opt =>
+            // ✅ Authentication (JWT + Google + Facebook)
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    var googleAuth = builder.Configuration.GetSection("Authentication:Google");
-                    opt.ClientId = googleAuth["ClientId"];
-                    opt.ClientSecret = googleAuth["ClientSecret"];
-                    opt.SignInScheme = IdentityConstants.ExternalScheme;
-                })
-                .AddFacebook(options =>
-                {
-                    options.AppId = builder.Configuration["Authentication:Facebook:AppId"];
-                    options.AppSecret = builder.Configuration["Authentication:Facebook:AppSecret"];
-                });
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+
+                    ValidIssuer = "https://localhost:7061/",
+                    ValidAudience = "http://localhost:4200/",
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes("eqlkjrljlejrljljghhljflwqlfhuhfuhougoivsldjckklzlkjvlsajkvhjkqevkjeqkjfvukqlv")
+                    ),
+                    ClockSkew = TimeSpan.Zero
+                };
+            })
+            .AddGoogle("google", opt =>
+            {
+                var googleAuth = builder.Configuration.GetSection("Authentication:Google");
+                opt.ClientId = googleAuth["ClientId"];
+                opt.ClientSecret = googleAuth["ClientSecret"];
+                opt.SignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddFacebook(options =>
+            {
+                options.AppId = builder.Configuration["Authentication:Facebook:AppId"];
+                options.AppSecret = builder.Configuration["Authentication:Facebook:AppSecret"];
+            });
 
             // ✅ Repositories
             builder.Services.AddScoped<IApplicationUserRepository, ApplicationUserRepository>();
@@ -87,10 +132,13 @@ namespace keswa
             builder.Services.AddScoped<IProductOrderRepository, ProductOrderRepository>();
             builder.Services.AddScoped<IProductCartRepository, ProductCartRepository>();
             builder.Services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+            builder.Services.AddScoped<ICartService, CartService>();
 
             builder.Services.AddAutoMapper(typeof(MappingProfile));
             var app = builder.Build();
-
+            //stripe
+            var stripeSettings = builder.Configuration.GetSection("Stripe");
+            Stripe.StripeConfiguration.ApiKey = stripeSettings["SecretKey"];
             // ✅ Development tools
             if (app.Environment.IsDevelopment())
             {
@@ -101,6 +149,10 @@ namespace keswa
             }
 
             app.UseHttpsRedirection();
+
+            // ✅ Apply localization middleware
+            var locOptions = app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>();
+            app.UseRequestLocalization(locOptions.Value);
 
             // ✅ Order of middleware is important
             app.UseRouting();

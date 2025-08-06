@@ -20,6 +20,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.17" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="8.0.17" />
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="8.0.17" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kesawa Data Access\Keswa Data Access.csproj" />
   </ItemGroup>
 
 </Project>

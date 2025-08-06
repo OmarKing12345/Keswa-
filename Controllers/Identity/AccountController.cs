@@ -1,11 +1,19 @@
 ﻿using Keswa_Entities.Dtos;
 using Keswa_Entities.Models;
+using Keswa_Project.Controllers.Admin;
 using Keswa_Untilities;
+using Keswa_Untilities.Service;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Runtime.Versioning;
+using System.Security.Claims;
+using System.Text;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace Keswa_Project.Controllers.Identity
@@ -16,103 +24,174 @@ namespace Keswa_Project.Controllers.Identity
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IEmailSender _emailSender;
-        private readonly SignInManager<ApplicationUser> signIn;
+        private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<AccountController> _logger;
+        private readonly IStringLocalizer<AccountController> _localizer;
 
-        public AccountController(UserManager<ApplicationUser> userManager, IEmailSender emailSender, SignInManager<ApplicationUser> signIn, RoleManager<IdentityRole> roleManager)
+
+        public AccountController(
+            UserManager<ApplicationUser> userManager,
+            IEmailSender emailSender,
+            SignInManager<ApplicationUser> signInManager,
+            RoleManager<IdentityRole> roleManager,
+            IConfiguration configuration,
+            ILogger<AccountController> logger,
+            IStringLocalizer<AccountController> localizer)
         {
             _userManager = userManager;
             _emailSender = emailSender;
-            this.signIn = signIn;
+            _signInManager = signInManager;
             _roleManager = roleManager;
+            _configuration = configuration;
+            _logger = logger;
+            _localizer = localizer;
         }
 
-        [HttpPost("RegisterAccount")]
-        public async Task<IActionResult> RegisterAccount(RegisterDto registerVM)
+        [HttpPost("register")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> RegisterAccount([FromBody] RegisterDto registerVM)
         {
-            if (!_roleManager.Roles.Any())
+            try
             {
-                await _roleManager.CreateAsync(new IdentityRole(SD.Admin));
-                await _roleManager.CreateAsync(new IdentityRole(SD.SuperAdmin));
-                await _roleManager.CreateAsync(new IdentityRole(SD.USer));
-                await _roleManager.CreateAsync(new IdentityRole(SD.Company));
-            }
+                if (!ModelState.IsValid)
+                    return BadRequest(ApiResponse<string>.Failure(ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))));
 
-            var applicationUser = new ApplicationUser()
-            {
-                UserName = registerVM.UserName,
-                Email = registerVM.Email
-            };
-            var result = await _userManager.CreateAsync(applicationUser, registerVM.Password);
-            if (result.Succeeded)
-            {
+                await EnsureRolesExist();
+
+                var applicationUser = new ApplicationUser
+                {
+                    UserName = registerVM.UserName,
+                    Email = registerVM.Email
+                };
+
+                var result = await _userManager.CreateAsync(applicationUser, registerVM.Password);
+                if (!result.Succeeded)
+                    return BadRequest(ApiResponse<string>.Failure(result.Errors.Select(e => e.Description)));
+
                 await _userManager.AddToRoleAsync(applicationUser, SD.USer);
+
                 var token = await _userManager.GenerateEmailConfirmationTokenAsync(applicationUser);
-                var confirmationLink = Url.Action("ConfirmEmail", "Account",
-                    new { area = "Identity", applicationUser.Id, token }, Request.Scheme);
-                await _emailSender.SendEmailAsync(applicationUser.Email, "Confirmation Email", $"<h1>Confirm Your Account By Click <a href='{confirmationLink}'>Here</a></h1>");
-                return Ok("Registered Successfully");
+                var confirmationLink = GenerateEmailConfirmationLink(applicationUser.Id, token);
+                await _emailSender.SendEmailAsync(
+                    applicationUser.Email,
+                    "Confirm Your Email",
+                    $"<h1>Please confirm your account by clicking <a href='{confirmationLink}'>here</a></h1>");
+
+                var resultOk = _localizer["Successful Registeration"];
+                return Ok(ApiResponse<string>.Success(resultOk.Value));
             }
-            else
+            catch (Exception ex)
             {
-                return BadRequest(result.Errors);
+                _logger.LogError(ex, "Error during user registration");
+                return StatusCode(500, ApiResponse<string>.Failure(new[] {_localizer["Registeration Error"].ToString()}));
             }
         }
 
-        [HttpGet("ConfirmEmail")]
-        public async Task<IActionResult> ConfirmEmail(string Id, string token)
+        [HttpPost("login")]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Login([FromBody] LoginDto loginVM)
         {
-            var user = await _userManager.FindByIdAsync(Id);
-            if (user is not null)
+           
+            if (!ModelState.IsValid)
+                return BadRequest(ApiResponse<string>.Failure(ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))));
+
+            var user = await _userManager.FindByNameAsync(loginVM.UserNameOrEmail)
+                ?? await _userManager.FindByEmailAsync(loginVM.UserNameOrEmail);
+
+            if (user == null)
+                return BadRequest(ApiResponse<string>.Failure(new[] { _localizer["Invalid credentials"].ToString() }));
+
+            if (!await _userManager.IsEmailConfirmedAsync(user))
+                return BadRequest(ApiResponse<string>.Failure(new[] { _localizer["email confirmation"].ToString() }));
+
+            var result = await _userManager.CheckPasswordAsync(user, loginVM.Password);
+            if (!result)
+                return BadRequest(ApiResponse<string>.Failure(new[] { _localizer["Invalid credentials"].ToString() }));
+
+
+
+
+            var roles = await _userManager.GetRolesAsync(user);
+
+            var claims = new List<Claim>
+             {
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(ClaimTypes.Name, user.UserName),
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim("Email", user.Email ?? "")
+
+             };
+
+            foreach (var role in roles)
             {
-                var result = await _userManager.ConfirmEmailAsync(user, token);
-                if (result.Succeeded)
-                {
-                    return Ok("Email confirmed successfully");
-                }
-                else
-                {
-                    return BadRequest();
-                }
+                claims.Add(new Claim(ClaimTypes.Role, role));
             }
-            return BadRequest();
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("eqlkjrljlejrljljghhljflwqlfhuhfuhougoivsldjckklzlkjvlsajkvhjkqevkjeqkjfvukqlv"));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+
+            var JWToken = new JwtSecurityToken
+                (
+                 issuer: "https://localhost:7061/",
+                 audience: "http://localhost:4200/",
+                 claims: claims,
+                 expires: DateTime.UtcNow.AddHours(2),
+                 signingCredentials: creds
+            );
+
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(JWToken);
+
+            return Ok(new { token = tokenString });
+
+
         }
 
-        [HttpPost("Login")]
-        public async Task<IActionResult> Login(LoginDto loginVM)
+        private async Task EnsureRolesExist()
         {
-            var applicationUser = await _userManager.FindByNameAsync(loginVM.UserNameOrEmail);
-            if (applicationUser is null)
-            {
-                applicationUser = await _userManager.FindByEmailAsync(loginVM.UserNameOrEmail);
-            }
+            if (_roleManager.Roles.Any()) return;
 
-            if (applicationUser != null)
+            var roles = new[] { SD.Admin, SD.SuperAdmin, SD.USer, SD.Company };
+            foreach (var role in roles)
             {
-                var result = await _userManager.CheckPasswordAsync(applicationUser, loginVM.Password);
-                if (result)
-                {
-                    // ✅ إعداد claims يدويًا وإضافة ClaimTypes.Name
-                    var claims = new List<Claim>
+                await _roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        private async Task<List<Claim>> BuildUserClaims(ApplicationUser user)
+        {
+            var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, applicationUser.UserName), // مهم لـ SignalR
-                new Claim(ClaimTypes.NameIdentifier, applicationUser.Id),
-                new Claim("Email", applicationUser.Email ?? "")
+                new(ClaimTypes.Name, user.UserName),
+                new(ClaimTypes.NameIdentifier, user.Id),
+                new("Email", user.Email ?? "")
             };
 
-                    var identity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
-                    var principal = new ClaimsPrincipal(identity);
+            var roles = await _userManager.GetRolesAsync(user);
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-                    await HttpContext.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties
-                    {
-                        IsPersistent = true
-                    });
+            return claims;
+        }
 
-                    return Ok("Sign in successfully");
-                }
-                return BadRequest("Invalid password");
-            }
-            return BadRequest("User not found");
+        private async Task SignInUser(List<Claim> claims)
+        {
+            var identity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
+            var principal = new ClaimsPrincipal(identity);
+
+            await HttpContext.SignInAsync(IdentityConstants.ApplicationScheme, principal,
+                new AuthenticationProperties { IsPersistent = true });
+        }
+
+        private string GenerateEmailConfirmationLink(string userId, string token)
+        {
+            return Url.Action("ConfirmEmail", "Account",
+                new { area = "Identity", userId, token },
+                Request.Scheme);
         }
 
         [HttpPost("ForgetPassword")]
@@ -127,8 +206,8 @@ namespace Keswa_Project.Controllers.Identity
             {
                 string token = await _userManager.GeneratePasswordResetTokenAsync(applicationUser);
                 var resetPassword = Url.Action("ResetPassword", "Account", new { area = "Identity", applicationUser.Id, token, forgetPasswordVM.NewPassword, ConfirmPassword = forgetPasswordVM.ConfirmNewPassword }, Request.Scheme);
-                await _emailSender.SendEmailAsync(applicationUser.Email, "Reset Password", $"<h1>Reset Password Account By Click <a href='{resetPassword}'>Here</a></h1>");
-                return Ok("The email sent successfully");
+                await _emailSender.SendEmailAsync(applicationUser.Email, "Reset Password", $"<h1>{_localizer["Reset Password"]}<a href='{resetPassword}'>{_localizer["here"]}</a></h1>");
+                return Ok(_localizer["email send"]);
             }
             return BadRequest();
         }
@@ -139,13 +218,13 @@ namespace Keswa_Project.Controllers.Identity
             var user = await _userManager.FindByIdAsync(model.Id);
             if (user == null)
             {
-                return BadRequest("User not found.");
+                return BadRequest(_localizer["User not found"]);
             }
 
             var result = await _userManager.ResetPasswordAsync(user, model.token, model.NewPassword);
             if (result.Succeeded)
             {
-                return Ok("Password has been reset successfully.");
+                return Ok(_localizer["Password reset"]);
             }
 
             return BadRequest(result.Errors.Select(e => e.Description));
@@ -157,10 +236,10 @@ namespace Keswa_Project.Controllers.Identity
             {
                 if (!User.Identity.IsAuthenticated)
                 {
-                    return BadRequest("No user is currently signed in.");
+                    return BadRequest(_localizer["No user"]);
                 }
-                await signIn.SignOutAsync();
-                return Ok("Sign out successfully");
+                await _signInManager.SignOutAsync();
+                return Ok(_localizer["Sign out"]);
             }
             catch (Exception ex)
             {
@@ -172,7 +251,7 @@ namespace Keswa_Project.Controllers.Identity
         public IActionResult ExternalLogin(string provider, string returnUrl = "/")
         {
             var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Account", new { returnUrl });
-            var properties = signIn.ConfigureExternalAuthenticationProperties(provider, redirectUrl);
+            var properties = _signInManager.ConfigureExternalAuthenticationProperties(provider, redirectUrl);
             return Challenge(properties, provider);
         }
         [HttpGet("ExternalLoginCallback")]
@@ -185,13 +264,13 @@ namespace Keswa_Project.Controllers.Identity
                 return Redirect($"{returnUrl}?error={Uri.EscapeDataString(remoteError)}");
             }
 
-            var info = await signIn.GetExternalLoginInfoAsync();
+            var info = await _signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
                 return Redirect($"{returnUrl}?error=Login+info+not+available");
             }
 
-            var signInResult = await signIn.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
+            var signInResult = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
             if (signInResult.Succeeded)
             {
                 // جلب اسم المستخدم الحالي
@@ -225,7 +304,7 @@ namespace Keswa_Project.Controllers.Identity
                     return Redirect($"{returnUrl}?error=Error+linking+external+login");
                 }
 
-                await signIn.SignInAsync(user, isPersistent: false);
+                await _signInManager.SignInAsync(user, isPersistent: false);
                 // جلب اسم المستخدم الحالي بعد الإنشاء أو الربط
                 var username = user?.UserName ?? "";
                 var separator = returnUrl.Contains("?") ? "&" : "?";
@@ -234,21 +313,6 @@ namespace Keswa_Project.Controllers.Identity
 
             return Redirect($"{returnUrl}?error=Email+claim+not+found");
         }
-        [HttpGet("CurrentUser")]
-        public async Task<IActionResult> GetCurrentUser()
-        {
-            if (!User.Identity.IsAuthenticated)
-                return Unauthorized();
-
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-                return NotFound();
-
-            return Ok(new { username = user.UserName, email = user.Email });
-        }
-
-        
 
     }
 }

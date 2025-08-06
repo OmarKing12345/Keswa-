@@ -4,19 +4,16 @@ using Kesawa_Data_Access.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace Keswa_Project.Migrations
+namespace Kesawa_Data_Access.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250722161041_kk")]
-    partial class kk
+    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -49,6 +46,9 @@ namespace Keswa_Project.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
+
+                    b.Property<string>("Image")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
@@ -246,32 +246,55 @@ namespace Keswa_Project.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("CarrierId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("Date")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("PaymentId")
+                    b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<double>("Price")
-                        .HasColumnType("float");
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("SessionId")
-                        .HasColumnType("int");
+                    b.Property<string>("TrackingCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("ShippedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("Status")
-                        .HasColumnType("bit");
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CarrierId");
-
                     b.ToTable("Orders");
+                });
+
+            modelBuilder.Entity("Keswa_Entities.Models.OrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("OrderItems");
                 });
 
             modelBuilder.Entity("Keswa_Entities.Models.Product", b =>
@@ -292,6 +315,10 @@ namespace Keswa_Project.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ImageUrl")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -538,15 +565,23 @@ namespace Keswa_Project.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("Keswa_Entities.Models.Order", b =>
+            modelBuilder.Entity("Keswa_Entities.Models.OrderItem", b =>
                 {
-                    b.HasOne("Keswa_Entities.Models.Carrier", "Carrier")
-                        .WithMany()
-                        .HasForeignKey("CarrierId")
+                    b.HasOne("Keswa_Entities.Models.Order", "Order")
+                        .WithMany("Items")
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Carrier");
+                    b.HasOne("Keswa_Entities.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("Keswa_Entities.Models.Product", b =>
@@ -599,7 +634,7 @@ namespace Keswa_Project.Migrations
             modelBuilder.Entity("Keswa_Entities.Models.ProductOrder", b =>
                 {
                     b.HasOne("Keswa_Entities.Models.Order", "Order")
-                        .WithMany("ProductOrders")
+                        .WithMany()
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -685,7 +720,7 @@ namespace Keswa_Project.Migrations
 
             modelBuilder.Entity("Keswa_Entities.Models.Order", b =>
                 {
-                    b.Navigation("ProductOrders");
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("Keswa_Entities.Models.Product", b =>
