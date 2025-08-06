@@ -6,7 +6,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Kesawa_Data_Access.Migrations
 {
     /// <inheritdoc />
+<<<<<<<< HEAD:Kesawa Data Access/Migrations/20250802185118_InicialCreate.cs
     public partial class InicialCreate : Migration
+========
+    public partial class createDB : Migration
+>>>>>>>> ed7867d61f771ce0be9526c0587efb02031f9e38:Kesawa Data Access/Migrations/20250802185322_createDB.cs
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -30,6 +34,7 @@ namespace Kesawa_Data_Access.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    Image = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Address = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Age = table.Column<int>(type: "int", nullable: true),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
@@ -122,8 +127,12 @@ namespace Kesawa_Data_Access.Migrations
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     TotalAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     Status = table.Column<int>(type: "int", nullable: false),
+<<<<<<<< HEAD:Kesawa Data Access/Migrations/20250802185118_InicialCreate.cs
                     TrackingCode = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     StripeSessionId = table.Column<string>(type: "nvarchar(max)", nullable: false)
+========
+                    TrackingCode = table.Column<string>(type: "nvarchar(max)", nullable: false)
+>>>>>>>> ed7867d61f771ce0be9526c0587efb02031f9e38:Kesawa Data Access/Migrations/20250802185322_createDB.cs
                 },
                 constraints: table =>
                 {

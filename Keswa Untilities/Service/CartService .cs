@@ -12,11 +12,15 @@ namespace Keswa_Untilities.Service
         private readonly string _prefix = "cart:";
         private readonly ApplicationDbContext _dbContext;
 
+
         public CartService(IConnectionMultiplexer redis, ApplicationDbContext context)
         {
             _redisDb = redis.GetDatabase();
             _dbContext = context;
         }
+
+
+
 
         public async Task<List<CartItem>> GetCartAsync(string userId)
         {

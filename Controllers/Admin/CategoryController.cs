@@ -1,10 +1,11 @@
 ﻿using Kesawa_Data_Access.Repository.IRepository;
+using Keswa_Entities.Dtos.Request;
+using Keswa_Entities.Dtos.Response;
 using Keswa_Entities.Models;
+using Mapster;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Keswa_Entities.Dtos.Response;
-using Keswa_Entities.Dtos.Request;
-using Mapster;
+using Microsoft.Extensions.Localization;
 namespace Keswa_Project.Controllers.Admin
 
 {
@@ -12,11 +13,14 @@ namespace Keswa_Project.Controllers.Admin
     [ApiController]
     public class CategoryController : ControllerBase
     {
-        private readonly ICategoryRepository _categoryRepository;   
+        private readonly ICategoryRepository _categoryRepository;
+        private readonly IStringLocalizer<CategoryController> _localizer;
 
-        public CategoryController(ICategoryRepository categoryRepository)
+
+        public CategoryController(ICategoryRepository categoryRepository, IStringLocalizer<CategoryController> localizer)
         {
-            _categoryRepository = categoryRepository;   
+            _categoryRepository = categoryRepository;
+            _localizer = localizer;
         }
 
         [HttpGet("")]
@@ -86,7 +90,7 @@ namespace Keswa_Project.Controllers.Admin
             {
                  _categoryRepository.Delete(category);
                 await _categoryRepository.CommitAsync();
-                return Ok("Deleted successfully");
+                return Ok(_localizer["Deleted successfully"]);
             }
 
             return NotFound();
