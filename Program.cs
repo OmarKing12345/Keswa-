@@ -5,10 +5,11 @@ using Keswa_Entities.Mapping;
 using Keswa_Entities.Models;
 using Keswa_Project.Hubs;
 using Keswa_Untilities;
+using Keswa_Untilities.Service;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using StackExchange.Redis;
 
 namespace keswa
 {
@@ -38,6 +39,8 @@ namespace keswa
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
             builder.Services.AddSignalR(); // ✅ لازم تضيف دي
+            //Radis
+            builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost"));
 
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
@@ -87,10 +90,13 @@ namespace keswa
             builder.Services.AddScoped<IProductOrderRepository, ProductOrderRepository>();
             builder.Services.AddScoped<IProductCartRepository, ProductCartRepository>();
             builder.Services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+            builder.Services.AddScoped<ICartService, CartService>();
 
             builder.Services.AddAutoMapper(typeof(MappingProfile));
             var app = builder.Build();
-
+            //stripe
+            var stripeSettings = builder.Configuration.GetSection("Stripe");
+            Stripe.StripeConfiguration.ApiKey = stripeSettings["SecretKey"];
             // ✅ Development tools
             if (app.Environment.IsDevelopment())
             {

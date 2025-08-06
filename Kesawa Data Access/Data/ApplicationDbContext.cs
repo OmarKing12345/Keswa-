@@ -1,11 +1,6 @@
 ﻿using Keswa_Entities.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Kesawa_Data_Access.Data
 {
@@ -20,13 +15,13 @@ namespace Kesawa_Data_Access.Data
         public DbSet<Cart> Carts { get; set; }
         public DbSet<Category> Categories { get; set; }
         public DbSet<CategoryBrand> CategoryBrands { get; set; }
-        public DbSet<Order> Orders { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<ProductCart> ProductCarts { get; set; }
         public DbSet<ProductImage> ProductImages { get; set; }
         public DbSet<ProductOrder> ProductOrders { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
-
+        public DbSet<Order> Orders { get; set; }
+        public DbSet<OrderItem> OrderItems => Set<OrderItem>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -38,6 +33,14 @@ namespace Kesawa_Data_Access.Data
 
             modelBuilder.Entity<CategoryBrand>()
                 .HasKey(cb => new { cb.CategoryId, cb.BrandId });
+
+            modelBuilder.Entity<Order>()
+                .HasMany(o => o.Items)
+                .WithOne(oi => oi.Order)
+                .HasForeignKey(oi => oi.OrderId);
+            modelBuilder.Entity<Order>()
+      .Property(o => o.Status)
+      .HasConversion<string>();
         }
     }
 }

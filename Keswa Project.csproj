@@ -8,23 +8,32 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Kesawa Data Access\**" />
+    <Compile Remove="Keswa Entities\**" />
+    <Compile Remove="Keswa Untilities\**" />
+    <Content Remove="Kesawa Data Access\**" />
+    <Content Remove="Keswa Entities\**" />
+    <Content Remove="Keswa Untilities\**" />
+    <EmbeddedResource Remove="Kesawa Data Access\**" />
+    <EmbeddedResource Remove="Keswa Entities\**" />
+    <EmbeddedResource Remove="Keswa Untilities\**" />
+    <None Remove="Kesawa Data Access\**" />
+    <None Remove="Keswa Entities\**" />
+    <None Remove="Keswa Untilities\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Mapster" Version="7.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.17">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Stripe.net" Version="48.5.0-beta.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\backendproject\Kesawa Data Access\Keswa Data Access.csproj" />
-    <ProjectReference Include="..\backendproject\Keswa Entities\Keswa Entities.csproj" />
-    <ProjectReference Include="..\backendproject\Keswa Untilities\Keswa Untilities.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Migrations\" />
     <Folder Include="wwwroot\Images\" />
   </ItemGroup>
 
@@ -36,6 +45,12 @@
     <None Include="wwwroot\Images\man.webp" />
     <None Include="wwwroot\Images\ProductImages.sql" />
     <None Include="wwwroot\Images\T-shirt.webp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Kesawa Data Access\Keswa Data Access.csproj" />
+    <ProjectReference Include="Keswa Entities\Keswa Entities.csproj" />
+    <ProjectReference Include="Keswa Untilities\Keswa Untilities.csproj" />
   </ItemGroup>
 
 </Project>
