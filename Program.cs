@@ -47,7 +47,9 @@ namespace keswa
             builder.Services.AddSignalR(); // ✅ لازم تضيف دي
             //Radis
             builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost"));
-
+            //stripe
+            var stripeSettings = builder.Configuration.GetSection("Stripe");
+            Stripe.StripeConfiguration.ApiKey = stripeSettings["SecretKey"];
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -68,7 +70,8 @@ namespace keswa
                 new CultureInfo(defaultCulture),
                 new CultureInfo("ar")
             };
-            builder.Services.Configure<RequestLocalizationOptions>(options => {
+            builder.Services.Configure<RequestLocalizationOptions>(options =>
+            {
                 options.DefaultRequestCulture = new RequestCulture(defaultCulture);
                 options.SupportedCultures = supportedCultures;
                 options.SupportedUICultures = supportedCultures;

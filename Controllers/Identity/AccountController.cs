@@ -1,6 +1,5 @@
 ﻿using Keswa_Entities.Dtos;
 using Keswa_Entities.Models;
-using Keswa_Project.Controllers.Admin;
 using Keswa_Untilities;
 using Keswa_Untilities.Service;
 using Microsoft.AspNetCore.Authentication;
@@ -10,11 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Text;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace Keswa_Project.Controllers.Identity
 {
@@ -86,7 +82,7 @@ namespace Keswa_Project.Controllers.Identity
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during user registration");
-                return StatusCode(500, ApiResponse<string>.Failure(new[] {_localizer["Registeration Error"].ToString()}));
+                return StatusCode(500, ApiResponse<string>.Failure(new[] { _localizer["Registeration Error"].ToString() }));
             }
         }
 
@@ -95,7 +91,7 @@ namespace Keswa_Project.Controllers.Identity
         [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Login([FromBody] LoginDto loginVM)
         {
-           
+
             if (!ModelState.IsValid)
                 return BadRequest(ApiResponse<string>.Failure(ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))));
 
