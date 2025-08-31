@@ -1,26 +1,29 @@
 ﻿using Kesawa_Data_Access.Data;
+using Kesawa_Data_Access.Repository.IRepository;
 using Keswa_Entities.Dtos;
 using Keswa_Entities.Models;
 using Keswa_Entities.Models.Emum;
 using Keswa_Untilities.Service;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Stripe.Checkout;
 using Order = Keswa_Entities.Models.Order;
-
 
 namespace Keswa_Project.Controllers
 {
     [ApiController]
     [Route("api/cart")]
-
     public class CartController : ControllerBase
     {
         private readonly ICartService _cartService;
         private readonly ApplicationDbContext _dbContext;
-        public CartController(ICartService cartService, ApplicationDbContext dbContext)
+        private readonly IProductRepository _productRepository;
+
+        public CartController(ICartService cartService, ApplicationDbContext dbContext, IProductRepository productRepository)
         {
             _cartService = cartService;
             _dbContext = dbContext;
+            _productRepository = productRepository;
         }
 
         [HttpPost("add")]
@@ -29,6 +32,13 @@ namespace Keswa_Project.Controllers
             try
             {
                 await _cartService.AddToCartAsync(userId, item.ProductId, item.Quantity);
+                var currectProduct = await _productRepository.GetOneAsync(x => x.Id == item.ProductId);
+                if (currectProduct!=null)
+                {
+                    currectProduct.Count -= item.Quantity;
+                    await _productRepository.CommitAsync();
+                }
+                
                 return Ok("Product added to cart.");
             }
             catch (Exception ex)
@@ -36,6 +46,7 @@ namespace Keswa_Project.Controllers
                 return BadRequest($"Error: {ex.Message}");
             }
         }
+
         [HttpGet("cart")]
         public async Task<IActionResult> GetCart([FromQuery] string userId)
         {
@@ -49,30 +60,42 @@ namespace Keswa_Project.Controllers
                 return BadRequest($"Error: {ex.Message}");
             }
         }
+
         [HttpPut("update")]
         public async Task<IActionResult> UpdateCart([FromBody] UpdateCartItemDto dto)
         {
-
             try
             {
                 if (dto.Quantity <= 0)
                     return BadRequest("Quantity must be greater than 0");
 
                 var updatedCart = await _cartService.UpdateCartItemAsync(dto.UserId, dto.ProductId, dto.Quantity);
+                var currentProduct = await _productRepository.GetOneAsync(x => x.Id == dto.ProductId);
+                if (currentProduct != null)
+                {
+                    currentProduct.Count -= dto.Quantity;
+                    await _productRepository.CommitAsync();
+                }
                 return Ok(updatedCart);
             }
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
-
         }
+
         [HttpDelete("remove")]
-        public async Task<IActionResult> RemoveFromCart([FromQuery] string userId, [FromQuery] int productId)
+        public async Task<IActionResult> RemoveFromCart([FromQuery] string userId, [FromQuery] int productId, [FromQuery]int Quantity) 
         {
             try
             {
                 var updatedCart = await _cartService.RemoveFromCartAsync(userId, productId);
+                var currentProduct = await _productRepository.GetOneAsync(x => x.Id == productId);
+                if (currentProduct!=null)
+                {
+                    currentProduct.Count += Quantity;
+                    await _productRepository.CommitAsync();
+                }
                 return Ok(updatedCart);
             }
             catch (Exception ex)
@@ -86,25 +109,20 @@ namespace Keswa_Project.Controllers
         {
             try
             {
-                //var userId = User.Identity?.Name;
-                //if (string.IsNullOrEmpty(userId))
-                //    return Unauthorized("User is not authenticated");
-
                 var cart = await _cartService.GetCartAsync(request.UserId);
 
                 if (cart.Count == 0)
                     return BadRequest("Cart is empty.");
 
-                var domain = "https://localhost:7061";
-                var Successdomain = "http://127.0.0.1:5500/FrontendProject-20250730T213241Z-1-001/FrontendProject";
-
                 var options = new SessionCreateOptions
                 {
                     PaymentMethodTypes = new List<string> { "card" },
                     Mode = "payment",
-                    SuccessUrl = domain + "/api/cart/order-success?session_id={CHECKOUT_SESSION_ID}",///api/cart/order-success
-                    //SuccessUrl = Successdomain + "/success.html?session_id={CHECKOUT_SESSION_ID}",///api/cart/order-success
-                    CancelUrl = domain + "/cancel",
+
+                    // هنا التعديلات
+                    SuccessUrl = "http://127.0.0.1:5500/success.html?session_id={CHECKOUT_SESSION_ID}",
+                    CancelUrl = "http://127.0.0.1:5500/cancel.html",
+
                     LineItems = cart.Select(item => new SessionLineItemOptions
                     {
                         PriceData = new SessionLineItemPriceDataOptions
@@ -119,9 +137,9 @@ namespace Keswa_Project.Controllers
                         Quantity = item.Quantity
                     }).ToList(),
                     Metadata = new Dictionary<string, string>
-    {
-        { "userId",request.UserId }
-    }
+                    {
+                        { "userId", request.UserId }
+                    }
                 };
 
                 var service = new SessionService();
@@ -145,12 +163,10 @@ namespace Keswa_Project.Controllers
 
                 var userId = session.Metadata["userId"];
 
-
                 var cartItems = await _cartService.GetCartAsync(userId);
 
                 if (cartItems == null || cartItems.Count == 0)
                     return BadRequest("Cart is empty or already processed.");
-
 
                 var order = new Order
                 {
@@ -167,35 +183,29 @@ namespace Keswa_Project.Controllers
                     }).ToList()
                 };
 
-
                 _dbContext.Orders.Add(order);
                 await _dbContext.SaveChangesAsync();
-
 
                 await _cartService.ClearCartAsync(userId);
 
                 return Ok($"Order succeed");
-
             }
             catch (Exception ex)
             {
                 return BadRequest("Failed to process order: " + ex.Message);
             }
         }
+
         [HttpPost("save-order")]
         public async Task<IActionResult> SaveOrder([FromQuery] string sessionId)
         {
             try
             {
-
-
                 var sessionService = new SessionService();
                 var session = await sessionService.GetAsync(sessionId);
 
                 var lineItemService = new Stripe.Checkout.SessionLineItemService();
                 var lineItems = await lineItemService.ListAsync(sessionId);
-
-
 
                 var userId = session.Metadata["userId"];
                 if (string.IsNullOrEmpty(userId)) return BadRequest("User ID is missing.");
@@ -205,6 +215,7 @@ namespace Keswa_Project.Controllers
                     UserId = userId,
                     CreatedAt = DateTime.UtcNow,
                     Status = OrderStatus.Paid,
+                    StripeSessionId = sessionId,
                     TotalAmount = (decimal)(session.AmountTotal / 100m),
                     TrackingCode = Guid.NewGuid().ToString().Substring(0, 8).ToUpper(),
                     Items = new List<OrderItem>()
@@ -214,7 +225,7 @@ namespace Keswa_Project.Controllers
                 {
                     var productIdStr = item.Description;
                     if (!int.TryParse(productIdStr, out int productId))
-                        continue; // تخطى لو مش رقم
+                        continue;
 
                     order.Items.Add(new OrderItem
                     {
@@ -254,7 +265,5 @@ namespace Keswa_Project.Controllers
                 return StatusCode(500, "Error saving order.");
             }
         }
-
     }
-
 }

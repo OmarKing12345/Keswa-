@@ -3,6 +3,7 @@ using Keswa_Entities.Dtos.Request;
 using Keswa_Entities.Dtos.Response;
 using Keswa_Entities.Models;
 using Mapster;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Localization;
@@ -11,6 +12,7 @@ namespace Keswa_Project.Controllers.Admin
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class CategoryController : ControllerBase
     {
         private readonly ICategoryRepository _categoryRepository;

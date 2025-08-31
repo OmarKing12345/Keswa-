@@ -41,6 +41,9 @@ namespace Kesawa_Data_Access.Data
             modelBuilder.Entity<Order>()
       .Property(o => o.Status)
       .HasConversion<string>();
+            modelBuilder.Entity<Order>()
+        .Property(o => o.Status)
+        .HasConversion<int>();
         }
     }
 }

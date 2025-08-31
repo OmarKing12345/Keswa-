@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	 <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	  <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+
   </PropertyGroup>
 
 	<PropertyGroup>

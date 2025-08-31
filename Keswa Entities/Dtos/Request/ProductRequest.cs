@@ -18,7 +18,9 @@ namespace Keswa_Entities.Dtos.Request
         public double Price { get; set; }
         public int Count { get; set; }
 
-         public List<IFormFile> ProductImages { get; set; } = new();
+        public int Views { get; set; }
+
+        public List<IFormFile> ProductImages { get; set; } = new();
 
         public int CategoryId { get; set; }
         public int BrandId { get; set; }

@@ -11,6 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using static System.Net.WebRequestMethods;
 
 namespace Keswa_Project.Controllers.Identity
 {
@@ -74,7 +75,7 @@ namespace Keswa_Project.Controllers.Identity
                 await _emailSender.SendEmailAsync(
                     applicationUser.Email,
                     "Confirm Your Email",
-                    $"<h1>Please confirm your account by clicking <a href='{confirmationLink}'>here</a></h1>");
+                    $"<h1>Confirm Your Account By Click <a href='{confirmationLink}'>Here</a></h1>");
 
                 var resultOk = _localizer["Successful Registeration"];
                 return Ok(ApiResponse<string>.Success(resultOk.Value));
@@ -148,6 +149,21 @@ namespace Keswa_Project.Controllers.Identity
 
         }
 
+        [HttpGet("ConfirmEmail")]
+        public async Task<IActionResult> ConfirmEmail(string userId, string token)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return BadRequest("User not found");
+
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+            if (result.Succeeded)
+                return Ok("Email confirmed successfully");
+
+            return BadRequest("Email confirmation failed");
+        }
+
+
         private async Task EnsureRolesExist()
         {
             if (_roleManager.Roles.Any()) return;
@@ -185,46 +201,62 @@ namespace Keswa_Project.Controllers.Identity
 
         private string GenerateEmailConfirmationLink(string userId, string token)
         {
-            return Url.Action("ConfirmEmail", "Account",
-                new { area = "Identity", userId, token },
-                Request.Scheme);
-        }
 
+            return Url.Action("ConfirmEmail", "Account", new { area = "Identity", userId, token }, Request.Scheme);
+
+        }
         [HttpPost("ForgetPassword")]
         public async Task<IActionResult> ForgetPassword(ForgetPasswordDto forgetPasswordVM)
         {
-            var applicationUser = await _userManager.FindByEmailAsync(forgetPasswordVM.UserNameOrEmail);
-            if (applicationUser is null)
-            {
-                applicationUser = await _userManager.FindByNameAsync(forgetPasswordVM.UserNameOrEmail);
-            }
+            var applicationUser = await _userManager.FindByEmailAsync(forgetPasswordVM.UserNameOrEmail)
+                               ?? await _userManager.FindByNameAsync(forgetPasswordVM.UserNameOrEmail);
+
             if (applicationUser is not null)
             {
+                // Generate the token
                 string token = await _userManager.GeneratePasswordResetTokenAsync(applicationUser);
-                var resetPassword = Url.Action("ResetPassword", "Account", new { area = "Identity", applicationUser.Id, token, forgetPasswordVM.NewPassword, ConfirmPassword = forgetPasswordVM.ConfirmNewPassword }, Request.Scheme);
-                await _emailSender.SendEmailAsync(applicationUser.Email, "Reset Password", $"<h1>{_localizer["Reset Password"]}<a href='{resetPassword}'>{_localizer["here"]}</a></h1>");
-                return Ok(_localizer["email send"]);
+
+                // Build the reset link using FrontendUrl from settings
+                var frontendUrl = "http://127.0.0.1:5500";
+                var resetLink = $"{frontendUrl}/reset-password.html?userId={Uri.EscapeDataString(applicationUser.Id)}&token={Uri.EscapeDataString(token)}";
+
+                // Send email with clickable link
+                await _emailSender.SendEmailAsync(
+                    applicationUser.Email,
+                    "Reset Password",
+                    $@"
+                <p>Hello {applicationUser.UserName},</p>
+                <p>You requested to reset your password. Please click the link below:</p>
+                <p><a href='{resetLink}' style='color: blue; text-decoration: underline;'>Reset Password</a></p>
+                <br/>
+                <p>If you did not request this, please ignore this email.</p>
+            ");
+
+                return Ok("Reset password email has been sent.");
             }
-            return BadRequest();
+
+            return BadRequest("User not found.");
         }
 
-        [HttpGet("ResetPassword")]
-        public async Task<IActionResult> ResetPassword([FromQuery] ResetPasswordDto model)
+
+        [HttpPost("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
         {
             var user = await _userManager.FindByIdAsync(model.Id);
             if (user == null)
             {
-                return BadRequest(_localizer["User not found"]);
+                return BadRequest("User not found.");
             }
 
-            var result = await _userManager.ResetPasswordAsync(user, model.token, model.NewPassword);
+            var result = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
             if (result.Succeeded)
             {
-                return Ok(_localizer["Password reset"]);
+                return Ok("Password has been reset successfully.");
             }
 
             return BadRequest(result.Errors.Select(e => e.Description));
         }
+
         [HttpPost("sign out")]
         public async Task<IActionResult> SignOut()
         {
@@ -267,19 +299,19 @@ namespace Keswa_Project.Controllers.Identity
             }
 
             var signInResult = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
+            ApplicationUser user;
+
             if (signInResult.Succeeded)
             {
-                // جلب اسم المستخدم الحالي
-                var user = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
-                var username = user?.Email?.Split('@')[0] ?? "";
-                var separator = returnUrl.Contains("?") ? "&" : "?";
-                return Redirect($"{returnUrl}{separator}username={Uri.EscapeDataString(username)}");
+                user = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
             }
-
-            var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-            if (email != null)
+            else
             {
-                var user = await _userManager.FindByEmailAsync(email);
+                var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+                if (email == null)
+                    return Redirect($"{returnUrl}?error=Email+claim+not+found");
+
+                user = await _userManager.FindByEmailAsync(email);
                 if (user == null)
                 {
                     user = new ApplicationUser
@@ -301,14 +333,47 @@ namespace Keswa_Project.Controllers.Identity
                 }
 
                 await _signInManager.SignInAsync(user, isPersistent: false);
-                // جلب اسم المستخدم الحالي بعد الإنشاء أو الربط
-                var username = user?.UserName ?? "";
-                var separator = returnUrl.Contains("?") ? "&" : "?";
-                return Redirect($"{returnUrl}{separator}username={Uri.EscapeDataString(username)}");
             }
 
-            return Redirect($"{returnUrl}?error=Email+claim+not+found");
+            // هنا نفس خطوات إنشاء JWT
+            var roles = await _userManager.GetRolesAsync(user);
+
+            var claims = new List<Claim>
+    {
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        new Claim(ClaimTypes.Name, user.UserName),
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+        new Claim("Email", user.Email ?? "")
+    };
+
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("eqlkjrljlejrljljghhljflwqlfhuhfuhougoivsldjckklzlkjvlsajkvhjkqevkjeqkjfvukqlv"));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var JWToken = new JwtSecurityToken(
+                issuer: "https://localhost:7061/",
+                audience: "http://localhost:4200/",
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(2),
+                signingCredentials: creds
+            );
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(JWToken);
+
+            // ممكن تبعته كـ JSON بدل Redirect
+            // return Ok(new { token = tokenString });
+
+            // أو لو عايز تكمّل بـ Redirect للـ Frontend
+            var separator = returnUrl.Contains("?") ? "&" : "?";
+            return Redirect($"{returnUrl}{separator}token={Uri.EscapeDataString(tokenString)}");
         }
+
+
+
 
     }
 }

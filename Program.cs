@@ -13,7 +13,6 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using StackExchange.Redis;
 using System.Globalization;
 using System.Text;
 
@@ -25,18 +24,16 @@ namespace keswa
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // ✅ CORS Policy
+            // ✅ CORS Policy (Fixed)
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
-                    policy.WithOrigins(
-                        "http://127.0.0.1:5500", // لو بتفتح من live server
-                        "http://127.0.0.1:5501"  // أو بورت تاني
-                    )
-                    .AllowAnyHeader()
-                    .AllowAnyMethod()
-                    .AllowCredentials(); // لو هتستخدم كوكيز أو login
+                    policy
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .SetIsOriginAllowed(_ => true) // يسمح بأي origin
+                        .AllowCredentials(); // ✅ بيشتغل كده من غير conflict
                 });
             });
 
@@ -44,32 +41,28 @@ namespace keswa
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-            builder.Services.AddSignalR(); // ✅ لازم تضيف دي
-            //Radis
-            builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost"));
-            //stripe
+            builder.Services.AddSignalR();
+
+            // Stripe
             var stripeSettings = builder.Configuration.GetSection("Stripe");
             Stripe.StripeConfiguration.ApiKey = stripeSettings["SecretKey"];
             builder.Services.AddTransient<IEmailSender, EmailSender>();
 
+            // Database
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             {
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
             });
 
+            // Identity
             builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddDefaultTokenProviders();
 
-
             builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
             const string defaultCulture = "en";
-            var supportedCultures = new[]
-            {
-                new CultureInfo(defaultCulture),
-                new CultureInfo("ar")
-            };
+            var supportedCultures = new[] { new CultureInfo(defaultCulture), new CultureInfo("ar") };
             builder.Services.Configure<RequestLocalizationOptions>(options =>
             {
                 options.DefaultRequestCulture = new RequestCulture(defaultCulture);
@@ -77,17 +70,17 @@ namespace keswa
                 options.SupportedUICultures = supportedCultures;
             });
 
-            // ✅ Cookie Authentication for Identity
+            // Cookies
             builder.Services.ConfigureApplicationCookie(options =>
             {
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SameSite = SameSiteMode.None; // Important for cross-origin
-                options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Important for HTTPS
+                options.Cookie.SameSite = SameSiteMode.None;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.LoginPath = "/api/Account/Login";
                 options.LogoutPath = "/api/Account/SignOut";
             });
 
-            // ✅ Authentication (JWT + Google + Facebook)
+            // Auth (JWT + Google + Facebook)
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -102,8 +95,8 @@ namespace keswa
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
 
-                    ValidIssuer = "https://localhost:7061/",
-                    ValidAudience = "http://localhost:4200/",
+                    //ValidIssuer = "https://localhost:7061/",
+                    //ValidAudience = "http://localhost:4200/",
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes("eqlkjrljlejrljljghhljflwqlfhuhfuhougoivsldjckklzlkjvlsajkvhjkqevkjeqkjfvukqlv")
                     ),
@@ -138,31 +131,44 @@ namespace keswa
             builder.Services.AddScoped<ICartService, CartService>();
 
             builder.Services.AddAutoMapper(typeof(MappingProfile));
+
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole();
+            builder.Logging.AddDebug();
+            builder.Logging.AddEventSourceLogger();
+
             var app = builder.Build();
 
-            // ✅ Development tools
-            if (app.Environment.IsDevelopment())
+            try
             {
-                app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI();
-                app.UseStaticFiles(); // 👈 Enable serving static files
+                if (app.Environment.IsDevelopment())
+                {
+                    app.UseDeveloperExceptionPage();
+                    app.UseSwagger();
+                    app.UseSwaggerUI();
+                    app.UseStaticFiles();
+                }
+
+                app.UseHttpsRedirection();
+
+                var locOptions = app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>();
+                app.UseRequestLocalization(locOptions.Value);
+
+                app.UseRouting();
+                app.UseCors("AllowFrontend");
+                app.UseAuthentication();
+                app.UseAuthorization();
+                app.MapHub<SupportHub>("/supporthub");
+                app.MapControllers();
+
+                app.Run();
             }
-
-            app.UseHttpsRedirection();
-
-            // ✅ Apply localization middleware
-            var locOptions = app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>();
-            app.UseRequestLocalization(locOptions.Value);
-
-            // ✅ Order of middleware is important
-            app.UseRouting();
-            app.UseCors("AllowFrontend");
-            app.UseAuthentication();
-            app.UseAuthorization();
-            app.MapHub<SupportHub>("/supporthub"); // Use lowercase to match frontend
-            app.MapControllers();
-            app.Run();
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Application failed to start: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
+                throw;
+            }
         }
     }
 }

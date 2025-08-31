@@ -11,7 +11,7 @@ namespace Keswa_Project.Controllers.Admin
 {
     [Route("api/Brand")]
     [ApiController]
-
+    [Authorize]
     public class BrandController : ControllerBase
     {
         private readonly IBrandRepository _brandRepository;
@@ -25,7 +25,6 @@ namespace Keswa_Project.Controllers.Admin
         }
 
         // GET: api/Brand
-        [Authorize]
         [HttpGet]
         public async Task<IActionResult> Get()
         {

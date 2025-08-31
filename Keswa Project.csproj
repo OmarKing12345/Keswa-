@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Keswa_Project</RootNamespace>
 	<AssemblyName>Keswa_Project</AssemblyName>
+	  <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+
   </PropertyGroup>
 
   <ItemGroup>
@@ -40,17 +42,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="wwwroot\Images\child2.webp" />
-    <None Include="wwwroot\Images\child4.webp" />
-    <None Include="wwwroot\Images\dress.webp" />
-    <None Include="wwwroot\Images\hoody.webp" />
-    <None Include="wwwroot\Images\man.webp" />
-    <None Include="wwwroot\Images\ProductImages.sql" />
-    <None Include="wwwroot\Images\T-shirt.webp" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="Kesawa Data Access\Keswa Data Access.csproj" />
     <ProjectReference Include="Keswa Entities\Keswa Entities.csproj" />
     <ProjectReference Include="Keswa Untilities\Keswa Untilities.csproj" />
   </ItemGroup>

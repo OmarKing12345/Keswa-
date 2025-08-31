@@ -1,144 +1,128 @@
 ﻿using Kesawa_Data_Access.Data;
 using Keswa_Entities.Models;
 using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
-using System.Text.Json;
 
 namespace Keswa_Untilities.Service
 {
     public class CartService : ICartService
     {
-        private readonly IDatabase _redisDb;
-        private readonly string _prefix = "cart:";
-        private readonly ApplicationDbContext _dbContext;
+        private readonly ApplicationDbContext _context;
 
-
-        public CartService(IConnectionMultiplexer redis, ApplicationDbContext context)
+        public CartService(ApplicationDbContext context)
         {
-            _redisDb = redis.GetDatabase();
-            _dbContext = context;
-        }
-
-
-
-
-        public async Task<List<CartItem>> GetCartAsync(string userId)
-        {
-            var key = _prefix + userId;
-            var cartJson = await _redisDb.StringGetAsync(key);
-            return cartJson.IsNullOrEmpty ? new List<CartItem>() :
-                JsonSerializer.Deserialize<List<CartItem>>(cartJson)!;
-        }
-
-        public async Task ClearCartAsync(string userId)
-        {
-            await _redisDb.KeyDeleteAsync(_prefix + userId);
+            _context = context;
         }
 
         public async Task AddToCartAsync(string userId, int productId, int quantity)
         {
-            var key = _prefix + userId;
-            var cartJson = await _redisDb.StringGetAsync(key);
+            var cart = await _context.Carts
+                .Include(c => c.ProductCarts)
+                .ThenInclude(pc => pc.Product)
+                .FirstOrDefaultAsync(c => c.Name == userId);
 
-            List<CartItem> cart = cartJson.IsNullOrEmpty
-                ? new List<CartItem>()
-                : JsonSerializer.Deserialize<List<CartItem>>(cartJson)!;
-
-            var existing = cart.FirstOrDefault(x => x.ProductId == productId);
-
-            if (existing != null)
+            if (cart == null)
             {
-                existing.Quantity += quantity;
+                cart = new Cart
+                {
+                    Name = userId,
+                    ProductCarts = new List<ProductCart>()
+                };
+                _context.Carts.Add(cart);
+            }
+
+            var existingItem = cart.ProductCarts.FirstOrDefault(pc => pc.ProductId == productId);
+            if (existingItem != null)
+            {
+                // لو عايز تحسبها بالكوانتيتي، محتاج تضيف Quantity field في ProductCart
+                // existingItem.Quantity += quantity; 
             }
             else
             {
-                var product = await _dbContext.Products.FindAsync(productId);
-                if (product == null)
-                    throw new Exception("Product not found");
-
-                cart.Add(new CartItem
+                cart.ProductCarts.Add(new ProductCart
                 {
                     ProductId = productId,
-                    Quantity = quantity,
-                    Name = product.Name,
-                    Price = (decimal)product.Price,
-                    Image = product.ImageUrl // عدّل لو اسم الخاصية مختلف
+                    Cart = cart
                 });
             }
 
-            await _redisDb.StringSetAsync(key, JsonSerializer.Serialize(cart));
+            await _context.SaveChangesAsync();
         }
 
+        public async Task<List<CartItem>> GetCartAsync(string userId)
+        {
+            var cart = await _context.Carts
+                .Include(c => c.ProductCarts)
+                .ThenInclude(pc => pc.Product)
+                .FirstOrDefaultAsync(c => c.Name == userId);
+
+            if (cart == null)
+                return new List<CartItem>();
+
+            return cart.ProductCarts.Select(pc => new CartItem
+            {
+                ProductId = pc.ProductId,
+                Name = pc.Product?.Name,
+                Quantity = 1 // مؤقت لحد ما تضيف Quantity في ProductCart
+            }).ToList();
+        }
+
+        public async Task ClearCartAsync(string userId)
+        {
+            var cart = await _context.Carts
+                .Include(c => c.ProductCarts)
+                .FirstOrDefaultAsync(c => c.Name == userId);
+
+            if (cart != null)
+            {
+                _context.ProductCarts.RemoveRange(cart.ProductCarts);
+                await _context.SaveChangesAsync();
+            }
+        }
 
         public async Task<List<CartItem>> GetCartWithDetailsAsync(string userId)
         {
-            var key = _prefix + userId;
-            var cartJson = await _redisDb.StringGetAsync(key);
-            var cartItems = cartJson.IsNullOrEmpty
-                ? new List<CartItem>()
-                : JsonSerializer.Deserialize<List<CartItem>>(cartJson)!;
-
-            var productIds = cartItems.Select(x => x.ProductId).ToList();
-            var products = await _dbContext.Products
-                .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id);
-
-            return cartItems.Select(item => new CartItem
-            {
-                ProductId = item.ProductId,
-                Quantity = item.Quantity,
-                Name = products[item.ProductId].Name,
-                Price = (decimal)products[item.ProductId].Price,
-                Image = products[item.ProductId].ImageUrl
-            }).ToList();
+            return await GetCartAsync(userId);
         }
+
         public async Task<List<CartItem>> UpdateCartItemAsync(string userId, int productId, int quantity)
         {
-            var key = _prefix + userId;
-            var cartJson = await _redisDb.StringGetAsync(key);
+            var cart = await _context.Carts
+                .Include(c => c.ProductCarts)
+                .ThenInclude(pc => pc.Product)
+                .FirstOrDefaultAsync(c => c.Name == userId);
 
-            if (cartJson.IsNullOrEmpty)
-                throw new Exception("Cart not found");
+            if (cart != null)
+            {
+                var existingItem = cart.ProductCarts.FirstOrDefault(pc => pc.ProductId == productId);
+                if (existingItem != null)
+                {
+                    // لو فيه Quantity field هتعدلها هنا
+                    // existingItem.Quantity = quantity;
+                }
+                await _context.SaveChangesAsync();
+            }
 
-            var cart = JsonSerializer.Deserialize<List<CartItem>>(cartJson)!;
-            var item = cart.FirstOrDefault(x => x.ProductId == productId);
-
-            if (item == null)
-                throw new Exception("Item not found in cart");
-
-            item.Quantity = quantity;
-            await _redisDb.StringSetAsync(key, JsonSerializer.Serialize(cart));
-            return cart;
+            return await GetCartAsync(userId);
         }
+
         public async Task<List<CartItem>> RemoveFromCartAsync(string userId, int productId)
         {
-            var key = _prefix + userId;
-            var cartJson = await _redisDb.StringGetAsync(key);
+            var cart = await _context.Carts
+                .Include(c => c.ProductCarts)
+                .FirstOrDefaultAsync(c => c.Name == userId);
 
-            if (cartJson.IsNullOrEmpty)
-                throw new Exception("Cart not found");
-
-            var cart = JsonSerializer.Deserialize<List<CartItem>>(cartJson)!;
-            var item = cart.FirstOrDefault(x => x.ProductId == productId);
-
-            if (item == null)
-                throw new Exception("Item not found in cart");
-
-            cart.Remove(item);
-
-            if (cart.Count == 0)
+            if (cart != null)
             {
-                await _redisDb.KeyDeleteAsync(key); // حذف السلة بالكامل لو فاضية
-            }
-            else
-            {
-                await _redisDb.StringSetAsync(key, JsonSerializer.Serialize(cart));
+                var existingItem = cart.ProductCarts.FirstOrDefault(pc => pc.ProductId == productId);
+                if (existingItem != null)
+                {
+                    cart.ProductCarts.Remove(existingItem);
+                    _context.ProductCarts.Remove(existingItem);
+                    await _context.SaveChangesAsync();
+                }
             }
 
-            return cart;
+            return await GetCartAsync(userId);
         }
-
-
     }
-
 }

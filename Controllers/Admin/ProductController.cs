@@ -12,6 +12,7 @@ namespace Keswa_Project.Controllers.Admin
 {
     [Route("api/Product")]
     [ApiController]
+    [Authorize]
      public class ProductController : ControllerBase
     {
         private readonly IProductRepository _productRepository;
@@ -181,18 +182,19 @@ namespace Keswa_Project.Controllers.Admin
             if (productInDb == null)
                 return NotFound("Product not found.");
 
-            // حذف الصور القديمة
-            foreach (var oldImage in productInDb.ProductImages)
-            {
-                var oldPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Images", oldImage.Image);
-                if (System.IO.File.Exists(oldPath))
-                    System.IO.File.Delete(oldPath);
-            }
-
-            // رفع الصور الجديدة
-            var newImages = new List<ProductImage>();
+            // لو فيه صور جديدة جايه
             if (productRequest.ProductImages != null && productRequest.ProductImages.Any())
             {
+                // حذف الصور القديمة
+                foreach (var oldImage in productInDb.ProductImages)
+                {
+                    var oldPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Images", oldImage.Image);
+                    if (System.IO.File.Exists(oldPath))
+                        System.IO.File.Delete(oldPath);
+                }
+
+                // رفع الصور الجديدة
+                var newImages = new List<ProductImage>();
                 foreach (var image in productRequest.ProductImages)
                 {
                     var fileName = Guid.NewGuid() + Path.GetExtension(image.FileName);
@@ -205,22 +207,26 @@ namespace Keswa_Project.Controllers.Admin
 
                     newImages.Add(new ProductImage { Image = fileName });
                 }
+
+                // تحديث الصور بالصور الجديدة فقط
+                productInDb.ProductImages = newImages;
             }
 
-            // تحديث الخصائص مباشرة
+            // تحديث باقي الخصائص
             productInDb.Name = productRequest.Name;
             productInDb.Description = productRequest.Description;
             productInDb.Status = productRequest.Status;
             productInDb.Price = productRequest.Price;
             productInDb.Count = productRequest.Count;
+            productInDb.Views = productRequest.Views;
             productInDb.BrandId = productRequest.BrandId;
             productInDb.CategoryId = productRequest.CategoryId;
-            productInDb.ProductImages = newImages;
 
             await _productRepository.CommitAsync();
 
             return NoContent();
         }
+
 
 
 

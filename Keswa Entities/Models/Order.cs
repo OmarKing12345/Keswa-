@@ -1,4 +1,5 @@
 ﻿using Keswa_Entities.Models.Emum;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Keswa_Entities.Models
 {
